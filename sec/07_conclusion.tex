@@ -1,0 +1,39 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+% 九修: conclusion condensed (advisor: slightly longer than the abstract);
+% 十修 round 2 audit found it came in ~30 words SHORTER than the abstract
+% (218 vs 246) -> mechanism-evidence sentence added to para 2 (~262 words).
+We presented Hyperion, a training-free style-transfer pipeline for
+MM-DiT built on a systematic analysis of latent-update strategies.
+Attention injection fails because a single feedforward substitution cannot
+induce spatial coherence; per-token optimal transport (SLT) aligns color
+distributions efficiently but produces no texture, since its per-token
+independence severs the inter-token coupling that backpropagation exploits
+through the attention Jacobian.
+The spatial neighbor cosine quantifies this difference: Adam gradients reach
+$\rho = 0.64$ whereas SLT updates reach $\rho = 0.24$, explaining the visual
+distinction between textured and flat stylization.
+
+Hyperion therefore combines SLT pre-alignment with two Adam refinement
+steps, so that Adam is devoted to texture from its first iteration;
+frequency-domain Sinkhorn boosting and LRS layout suppression provide
+further, independently validated improvements.
+Both components rest on mechanism-level evidence: shuffling the spatial
+order of the style keys and values leaves the coherence unchanged---so the
+coherence originates in the attention Jacobian, not in the layout of the
+reference---while the LRS factor attenuates attention-logit variance by
+$\gamma^{2}$, making residual layout leakage decay quadratically.
+On a benchmark of 39 style references $\times$ 6 content prompts (234 pairs),
+Hyperion attains CSD~$=0.640$ and CLIP-T~$=0.296$ with four forward passes
+per denoising step---exceeding an 8-iteration Adam-only schedule at
+$2.5\times$ lower forward-pass cost---and, despite using no style-specific
+training, surpasses four trained style adapters on 19 of 21 diverse style
+families; the same pipeline transfers directly to image-to-image
+stylization.
+
+Future work includes distilling the style signal into a lightweight side
+network to halve the per-step cost, extending the coherence analysis to video
+diffusion transformers, and combining the training-free backbone with sparse
+fine-tuning on style exemplars.
+Code and evaluation scripts will be released upon acceptance to support reproducibility.

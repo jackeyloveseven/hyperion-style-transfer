@@ -1,0 +1,155 @@
+% ============================================================
+%  Hyperion SLT+Adam Style Transfer — TPAMI submission
+%  Compile: pdflatex main -> bibtex main -> pdflatex -> pdflatex
+% ============================================================
+\documentclass[10pt,journal,compsoc]{IEEEtran}
+
+\usepackage{amsmath,amssymb,amsfonts,mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[table]{xcolor}
+\definecolor{tabshade}{HTML}{3E7FB8} % value-mapped cell shading in result tables
+\usepackage{subcaption}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage[
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=green!50!black,
+  urlcolor=blue!70!black,
+  filecolor=blue!70!black,
+]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+% Override cleveref names to use IEEE-style abbreviations
+\crefname{figure}{Fig.}{Figs.}
+\Crefname{figure}{Fig.}{Figs.}
+\crefname{table}{Table}{Tables}
+\Crefname{table}{Table}{Tables}
+\crefname{section}{Sec.}{Secs.}
+\Crefname{section}{Sec.}{Secs.}
+\crefname{equation}{Eq.}{Eqs.}
+\Crefname{equation}{Eq.}{Eqs.}
+\usepackage{dblfloatfix}   % fixes figure* placement in two-column IEEEtran
+
+% Relax float placement constraints (IEEEtran defaults are too strict)
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.5}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.7}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\dblfloatpagefraction}{0.7}
+\usepackage{placeins}  % \FloatBarrier keeps each section's floats inside it
+\usepackage{float}     % [H] pins small charts inline (no blank float pages)
+\usepackage{balance}   % 十修排版: balance the last references page's columns
+
+% ---- theorem environments ----
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{assumption}{Assumption}[section]
+\newtheorem{remark}{Remark}[section]
+% ---- paper-wide macros ----
+\newcommand{\TODO}[1]{{\color{red}\textbf{[TODO: #1]}}}
+\newcommand{\REV}[1]{#1}% submission build: revision trace neutralized
+\newcommand{\etal}{\textit{et~al.}}
+\newcommand{\LRS}{\textsc{lrs}}
+\newcommand{\Lsty}{\mathcal{L}_{\mathrm{sty}}}
+\newcommand{\Lcnt}{\mathcal{L}_{\mathrm{cnt}}}
+% 九修: unnumber \paragraph{} run-ins (advisor: drop 3.9.0.1-style numbers)
+\setcounter{secnumdepth}{3}
+% 十一修 评阅#5: IEEEtran(compsoc) 的 \paragraph 缩进是 2\parindent（老师圈的
+% 大缩进），改为零缩进；其余间距/字体保持类默认。标题内的句号/问号已全文清除
+% （类自动补冒号，原先渲染成 "Notation.:"）。
+\makeatletter
+\def\paragraph{\@startsection{paragraph}{4}{\z@}%
+  {-0ex plus -0.1ex minus -0.1ex}{0ex}{\normalfont\normalsize}}
+\makeatother
+% ---------------------------
+
+% 2026-07-03 九修: title + method name "Hyperion" (= the SLT + Adam-in-loop
+% + LRS pipeline; the old name was "Hy-brid", renamed globally, 106 sites,
+% mechanical rename NOT \REV-wrapped) per the advisor's direction.
+\title{Bridging the Training Gap with Hyperion: A Training-Free Style
+Transfer Method on Diffusion Transformers}
+
+\author{Yi~Li, Chengyan~Li, Zhirui~Fang, Junchuan~Zhang, Xuan~Wang, Huaibo~Huang, Yan~Luo, and~Yanqing~Guo%
+\IEEEcompsocitemizethanks{
+\IEEEcompsocthanksitem Y. Li, C. Li, Z. Fang, J. Zhang, Y. Luo, and Y. Guo are with Dalian University of Technology, Dalian, China.\protect\\
+E-mail: liyi@dlut.edu.cn, gggmdgzsx@mail.dlut.edu.cn, fangzr@mail.dlut.edu.cn, junchuanz@mail.dlut.edu.cn, 20211071090@mail.dlut.edu.cn, guoyq@dlut.edu.cn
+\IEEEcompsocthanksitem X. Wang is with Beihang University, Beijing, China. E-mail: zb2506519@buaa.edu.cn
+\IEEEcompsocthanksitem H. Huang is with the Institute of Automation, Chinese Academy of Sciences, Beijing, China. E-mail: huaibo.huang@cripac.ia.ac.cn
+}%
+}
+
+\begin{document}
+
+\maketitle
+
+% 十二修 (2026-07-09): abstract re-polished per advisor (师兄) — adds the
+% "optimization level / distribution level" framing and tightens the prose.
+% Numbers unchanged and CANONICAL-consistent (full 234-pair 0.640/0.296;
+% +5.2% vs Adam-8; +16.6% equal-budget; 19/21; mean 0.657 vs 0.506).
+% Supersedes the 九修 advisor revision.
+\begin{abstract}
+Training-free style transfer on Multimodal Diffusion Transformers (MM-DiT)
+remains challenging due to the persistent gap between trained adapters and
+injection-based training-free methods.
+Existing training-free methods typically perform forward feature injection, and
+thus struggle to reproduce the rich painterly textures achieved by trained
+adapters, often leading to only faint hue shifts.
+In this paper, we trace this limitation to the absence of
+backpropagation-induced spatial coupling and propose \textbf{Hyperion}, a fully
+training-free style-transfer pipeline for MM-DiT.
+At the optimization level, the pipeline introduces \textbf{Adam-in-loop}, which
+iteratively optimizes the diffusion latent at each denoising step with a frozen
+MM-DiT.
+This process recovers the gradient-driven coupling effect produced through the
+self-attention \emph{value path}, where neighboring tokens receive highly
+similar updates and form coherent brushstroke textures.
+At the distribution level, the pipeline introduces \textbf{Sinkhorn Latent
+Transport (SLT)}, a single closed-form optimal-transport step that pre-aligns
+latent color distributions before Adam optimization, improving the operational
+efficiency of Adam-in-loop.
+To further enhance stylization quality, we develop a frequency-domain Sinkhorn
+loss to sharpen painterly textures and a layout-residual-suppression step to
+reduce layout interference.
+The pipeline can also be extended to image-to-image stylization.
+Extensive experiments on a 39-style $\times$ 6-prompt benchmark (234 pairs)
+demonstrate that Hyperion achieves CSD~$= 0.640$ and CLIP-T~$= 0.296$,
+improving CSD by \textbf{+5.2\%} over Adam-8 at $2.5\times$ lower forward-pass
+cost and by \textbf{+16.6\%} over Adam-only under an equal compute budget.
+Notably, Hyperion outperforms four pre-trained style adapters on \textbf{19 of
+21} diverse style families, achieving a mean CSD of $0.657$ versus $0.506$ for
+the strongest baseline.
+\end{abstract}
+
+\begin{IEEEkeywords}
+style transfer, diffusion transformers, optimal transport, latent optimization,
+training-free generation
+\end{IEEEkeywords}
+
+\input{sec/01_intro}
+\input{sec/02_related}
+\input{sec/03_method}
+\input{sec/04_experiments}
+\input{sec/05_ablation}
+\input{sec/06_discussion}
+\input{sec/07_conclusion}
+
+\clearpage   % flush all pending floats before references
+\balance
+\bibliographystyle{IEEEtran}
+\bibliography{bib/refs}
+
+% 十三修排版 (2026-07-09): references restored to directly follow the conclusion
+% (pre-十二修 order, per advisor). The appendix is kept as one contiguous block at
+% the very end so the single-compile PDF (all 60+ cross-refs baked into pixels, no
+% xr/??) can be physically split into main.pdf (body+refs) + supplementary.pdf
+% (appendix) for the two-file TPAMI submission. supp.tex self-manages
+% \clearpage\onecolumn\appendices.
+\input{sec/supp}
+
+\end{document}

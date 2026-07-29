@@ -1,0 +1,153 @@
+\section{Related Work}
+\label{sec:related}
+
+% 十修: related work 由 7 个 subsection 合并精简为 4 个（作者指示）。原
+% (1) Classical NST、(2) Training-free diffusion、(3) Content-style
+% disentanglement、(4) Trained adapters、(5) Latent optimization、(6) Optimal
+% transport、(7) DiT architecture 重组为：§2.1=1+2+7、§2.2=4+3、§2.3=5、
+% §2.4=6。全部引用保留（仅删重复过渡句与各节冗余的局限性复述）；结构性
+% 重组不整体 \REV，新写的衔接句以 \REV 标记。ReMix 占位引用此前已删。
+Style transfer methods divide into two regimes---training-free \emph{injection}
+and \emph{trained} adapters---separated by a persistent quality gap: injection
+transfers color but little texture, while trained adapters achieve rich texture
+at the cost of per-style optimization.
+We trace this gap to a single missing ingredient, gradient feedback through the
+self-attention value path (Sec.~\ref{sec:method:gap}), and close it with a
+training-free pipeline combining Adam-in-loop optimization, Sinkhorn latent
+transport, and layout residual suppression.
+We organize the survey around this thesis, noting where each prior family sits
+relative to it.
+
+% ----------------------------------------------------------------
+\subsection{Training-Free Style Transfer: from Gram Matrices to Attention
+Injection}
+% ----------------------------------------------------------------
+
+Classical neural style transfer established the statistical view of
+style that we build on.
+Gatys \etal~\cite{gatys2016image} showed that Gram matrices of
+VGG~\cite{simonyan2015vgg} features capture perceptual texture statistics;
+feed-forward networks~\cite{johnson2016perceptual} amortized the per-style
+cost, and AdaIN~\cite{huang2017arbitrary} reduced arbitrary style transfer to
+channel-wise moment matching, later extended to whitening--coloring
+transforms~\cite{li2017universal} and higher-order moments~\cite{hsi2025}.
+These CNN-based methods operate on fixed VGG hierarchies and cannot
+express the cross-token gradient coupling that we identify as the source of
+brushstroke texture in modern diffusion
+transformers~\cite{peebles2023scalable,dosovitskiy2021vit}---in particular
+MM-DiT~\cite{esser2024scaling}, which processes image and text in jointly
+attending streams under RoPE positional encoding~\cite{su2024rope} and whose
+attention features encode high-fidelity spatial
+semantics~\cite{seg4diff2025,gan2025ditf}.
+
+Because self-attention keys and values in diffusion
+models~\cite{ho2020denoising} encode both semantic content and
+fine-grained texture~\cite{hertz2022prompt}, manipulating $K/V$ during
+denoising is the standard training-free stylization pathway.
+InST~\cite{zhang2023inst} encodes the style image in prompt space via textual
+inversion; Prompt-to-Prompt~\cite{hertz2022prompt} established attention maps
+as the central control knob for semantic manipulation.
+StyleID~\cite{chung2024styleid} retains content queries while substituting
+style $K/V$ with attention temperature scaling;
+StyleAligned~\cite{hertz2024style} shares $K/V$ across a batch;
+AttenST~\cite{attenst2025} aligns feature statistics with a content-aware
+AdaIN inside each attention block; SCSA~\cite{scsa2025} routes style tokens to
+content positions by semantic affinity; StyleSSP~\cite{xu2025stylessp}
+manipulates the sampling start-point via frequency-domain inversion; and
+Stable Flow~\cite{avrahami2025stableflow} restricts injection to structurally
+``vital'' layers.
+V-Shuffle~\cite{vshuffle2025} spatially permutes value tokens to sever layout
+correspondences; Inversion-Free Dual RF~\cite{dualrf2025} runs two
+rectified-flow branches with cross-branch injection;
+U-StyDiT~\cite{ustydit2025} adapts MM-DiT with a multi-view style modulator.
+Mask- and energy-based
+extensions~\cite{mast2026,omnipainter2025,stylegallery2026} trade user input
+or per-image overhead for finer control.
+All of these share one structural limitation: the latent update is a single
+feedforward substitution with no iterative feedback.
+Our spatial neighbor cosine analysis (Sec.~\ref{sec:method:gap}) provides a
+unified explanation---without backpropagation through the self-attention
+Jacobian, no cross-token gradient coupling exists, and stylization remains
+confined to faint hue shifts.
+
+% ----------------------------------------------------------------
+\subsection{Trained Style Adapters and Content--Style Disentanglement}
+% ----------------------------------------------------------------
+
+A parallel direction trains lightweight adapter modules on style-paired data.
+IP-Adapter~\cite{ipadapter2023} projects CLIP image embeddings of the
+reference into a parallel cross-attention branch;
+InstantStyle~\cite{wang2024instantstyle} routes adapter features to
+style-correlated layers only; CSGO~\cite{xing2024csgo} trains explicit
+content- and style-branch heads on a curated paired dataset;
+StyleShot~\cite{gao2024styleshot} replaces CLIP with
+DINO-derived~\cite{oquab2024dinov2} style features.
+ControlNet~\cite{zhang2023controlnet} and
+T2I-Adapter~\cite{mou2024t2iadapter} attach trainable encoders for spatial
+conditioning; on flow-matching backbones, MegaStyle~\cite{megastyle2026} and
+OmniStyle~\cite{omnistyle2025} scale trained stylization with large curated
+datasets, and per-style LoRA fine-tuning~\cite{hu2022lora} remains the
+fine-tuned alternative.
+Trained methods achieve high fidelity when the target style overlaps their
+training data, but the data and GPU costs preclude rapid adaptation to unseen
+references; our method is complementary---zero training, zero external data,
+deployable on any MM-DiT checkpoint.
+
+Within both regimes, a central challenge is separating a style's
+\emph{texture statistics} from its \emph{spatial layout}.
+SCAdapter~\cite{scadapter2026} decouples the two via a CLIP-based separation
+module; DICE~\cite{dice2026} learns a contrastive subspace decomposition of
+artist style; UniCSG~\cite{unicsg2026} performs staged semantic and frequency
+disentanglement; SCSA~\cite{scsa2025} disentangles by semantic routing.
+Our \textbf{Layout Residual Suppression} (Sec.~\ref{sec:method:lrs}) addresses
+the same problem with a minimal closed-form operation---attenuating the
+position-specific key residual $R_K^{(\ell)} = K_s - \mu_K$ by a
+layer-dependent coefficient while preserving the permutation-invariant token
+mean $\mu_K$ (global texture)---conceptually related to the mean--residual
+statistics of HSI~\cite{hsi2025} but operating directly on attention keys with
+no trainable parameters.
+
+% ----------------------------------------------------------------
+\subsection{Latent Optimization at Inference Time}
+% ----------------------------------------------------------------
+
+A minority of methods optimize the diffusion latent directly at inference
+time without updating model weights.
+SDEdit~\cite{meng2022sdedit} adds noise to a reference image and runs the
+reverse process for image-guided synthesis.
+DNO~\cite{dno2025} performs direct noise optimization with a
+probability-preserving regularizer, demonstrating that gradient-based latent
+updates can align generation with arbitrary reward signals at inference time;
+DAS~\cite{das2025} frames test-time alignment as sequential Monte Carlo
+sampling, avoiding reward over-optimization through principled importance
+weighting; FreeControl~\cite{lin2025freecontrol} extracts structural attention
+maps in a single forward pass and uses them to condition generation without
+iterative optimization.
+Our \textbf{Adam-in-loop} differs from all of the above: it optimizes the
+latent specifically via the \emph{style-alignment loss gradient through the
+self-attention Jacobian}, thereby injecting spatial coherence as a structural
+property of the optimization path rather than as a reward or structural
+condition.
+To our knowledge, no prior work has identified the attention Jacobian as the
+mechanistic source of brushstroke texture or exploited it explicitly for
+training-free style transfer.
+
+% ----------------------------------------------------------------
+\subsection{Optimal Transport in Generative Modeling}
+% ----------------------------------------------------------------
+
+The Wasserstein distance~\cite{villani2009optimal} and entropic-regularized
+OT~\cite{cuturi2013sinkhorn} are widely used in generative modeling as
+distribution discrepancy measures and alignment
+tools~\cite{peyre2019computational}.
+Wasserstein Flow Matching~\cite{haviv2025wasserstein} extends flow-matching to
+families of distributions along Wasserstein geodesics, and rectified
+flow~\cite{esser2024scaling} minimizes transport cost in the coupling space of
+the reverse process---in both cases OT enters as a \emph{training} objective.
+Our \textbf{SLT} is qualitatively distinct: it applies Sinkhorn optimal
+transport as a closed-form \emph{per-step latent pre-alignment} within a fully
+frozen network, exploiting the doubly-stochastic constraint to equate content
+and style token distributions in a single pass---no training objective, no
+network gradients---removing the color-correction sub-task that consumes the
+bulk of Adam's early gradient budget and leaving subsequent iterations free to
+generate texture through the Jacobian.

@@ -1,0 +1,109 @@
+\section{Discussion}
+\label{sec:discussion}
+
+Having shown that Hyperion leads on both style fidelity and efficiency, we now
+examine how to interpret the metrics behind those claims, then discuss failure
+modes and the scope of our baseline comparison.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Metric Considerations}
+\label{sec:discussion:metrics}
+
+\paragraph{CSD as primary metric}
+The Contrastive Style Descriptor~\cite{somepalli2024measuring} was designed to
+measure perceptual style similarity independently of semantic content.
+It remains a learned embedding, however, and is not immune to all confounders.
+When a method copies the style reference's composition rather than only its
+texture (layout leakage), the output and reference share not only style but also
+content, inflating CSD.
+We mitigate this by applying LRS (Sec.~\ref{sec:method:lrs}) and by
+reporting CLIP-T alongside CSD: a method that inflates CSD by composition
+copying would show degraded CLIP-T (the content prompt becomes unsatisfied
+because a foreign subject now fills the image).
+Table~\ref{tab:ablation} confirms that our method maintains CLIP-T while
+achieving high CSD, supporting the interpretation that our CSD gains reflect
+genuine style transfer rather than layout copying.
+
+\paragraph{CLIP-T and content preservation}
+CLIP-T~\cite{radford2021learning} measures semantic similarity of the output to the text prompt.
+It is sensitive to dominant compositional changes but may not penalize moderate
+texture artifacts.
+Outputs with strong style transfer but intact subject placement score similarly
+to mild-style outputs; the two are not separable by CLIP-T alone.
+For this reason, we present CLIP-T as a \emph{necessary} but not
+\emph{sufficient} indicator of content preservation.
+Qualitative inspection (Fig.~\ref{fig:qualitative}) provides complementary
+evidence.
+
+\paragraph{Forward-pass count as efficiency metric}
+Wall-clock timing reported in Table~\ref{tab:ablation} was measured under
+concurrent GPU load and should be treated as approximate.
+We use \emph{forward passes per denoising step} as the hardware-agnostic
+efficiency metric: each Adam iteration (one forward plus one backward pass
+per denoising step) adds approximately 2.1~s to total generation time on a
+single H200 at our resolution and batch size, and this per-iteration cost is
+stable across configurations.
+Independent H200 runs (5-trial median, 3 warmup runs) confirm this linear
+cost model to within 5\%.
+
+% 十修: C12 — acknowledge the absence of a user study (TPAMI style-transfer
+% papers近乎标配; 提前承认比被审稿人点名强).
+\paragraph{Absence of a human preference study}
+All conclusions in this paper rest on automated metrics (CSD, CLIP-T, CLIP-I,
+STM) corroborated by qualitative inspection.
+The metric triangulation of Sec.~\ref{sec:exp:texcoh}---which cross-checks the
+embedding-space CSD against parameter-free pixel-space texture
+statistics---mitigates single-descriptor bias, but a controlled
+two-alternative forced-choice user study remains the most direct measure of
+\emph{perceived} style fidelity and content preservation.
+We have not conducted one, and regard this as a limitation of the present
+evaluation.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Failure Cases and Limitations}
+\label{sec:discussion:limitations}
+
+\paragraph{Low-rank style references}
+Style \texttt{sty04} (excluded from all evaluations) contains near-uniform
+pixel statistics with effective rank below~5.
+The SLT transport plan degenerates when $z_s$ spans only a 1--2 dimensional
+subspace: the transported content latent collapses to a very small region of
+style space, and Adam cannot recover meaningful texture from it.
+A pre-screening filter on style diversity (e.g., pixel entropy or latent
+effective rank) is recommended for deployment.
+
+\paragraph{Object position drift}
+Despite LRS suppression, severe cases of spatial drift remain on some styles
+with high-contrast subjects positioned far from the center.
+The LRS residual coefficients ($\gamma^{(\ell)}$ from $0.7$ in shallow blocks
+to $0.5$ in deep blocks) retain a substantial share of the positional
+residual, which is sufficient to cause moderate drift in severe cases.
+Reducing $\gamma^{(\ell)}$ further eliminates drift but reduces texture
+sharpness; the current setting is a deliberate Pareto compromise.
+Both failure modes are most pronounced at $512\times512$; finer sub-token
+details and edge cases are expected to improve at higher latent resolution,
+which we leave to future work.
+
+\paragraph{Scope of the baseline comparison}
+The closest training-free competitors---StyleAligned~\cite{hertz2024style},
+V-Shuffle~\cite{vshuffle2025}, and Inversion-Free Dual~RF~\cite{dualrf2025}---were
+developed for SDXL and rectified-flow backbones and have no publicly released
+implementation for the Klein~9B MM-DiT architecture used here.
+Of these, V-Shuffle's value-permutation mechanism ports most directly to the
+MM-DiT attention layout: we evaluate a faithful adaptation head-to-head on the
+full 234-pair benchmark, where we dominate it on \emph{both} style fidelity and
+content alignment (Sec.~\ref{sec:exp}, Fig.~\ref{fig:vshuffle_cmp})---value
+permutation transfers incoherent texture on MM-DiT rather than coherent style.
+StyleAligned's attention-sharing and Dual~RF's inversion-free coupling are tied
+more deeply to architecture-specific layouts (single-stream SDXL self-attention
+and rectified-flow sampling, rather than MM-DiT's joint image--text stream and
+RoPE positional coupling), so a faithful port is a research effort in its own
+right, and an \emph{unvalidated} re-implementation could misrepresent their true
+capability.
+For those two we therefore do not report numbers we cannot stand behind,
+comparing instead against the \textbf{Inject} baseline---a representative of the
+attention-manipulation family they refine---and four \emph{trained} style
+adapters (StyleShot, USO, CSGO, IP-Adapter) across 21 diverse style families
+(Table~\ref{tab:percat}).
+Faithful MM-DiT ports of StyleAligned and Dual~RF, validated against their
+original results, are the natural next comparison.
